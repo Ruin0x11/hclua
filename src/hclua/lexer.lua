@@ -165,13 +165,13 @@ local function skip_till_heredoc_end(state, b, anchor)
 
       if line == anchor then
          b = next_byte(state)
-         return b
+         return b, true
       end
 
       b = next_byte(state)
    end
 
-   return b
+   return b, false
 end
 
 local function skip_space(state, b)
@@ -272,29 +272,18 @@ local function lex_short_string(state, quote)
 
             b = next_byte(state)
             s = schar(c1*16 + c2)
-         elseif b == BYTE_u then
+         elseif b == BYTE_u or b == BYTE_U then
+            local size = 4
+            if b == BYTE_U then
+               size = 8
+            end
+
             b = next_byte(state)  -- Skip "u".
 
-            if b ~= BYTE_OBRACE then
-               return nil, "invalid UTF-8 escape sequence", -2
-            end
-
-            b = next_byte(state)  -- Skip "{".
-
-            local codepoint  -- There should be at least one digit.
-
-            if b then
-               codepoint = to_hex(b)
-            end
-
-            if not codepoint then
-               return nil, "invalid UTF-8 escape sequence", -3
-            end
-
+            local codepoint = 0
             local hexdigits = 0
 
-            while true do
-               b = next_byte(state)
+            while hexdigits < size do
                local hex
 
                if b then
@@ -307,18 +296,14 @@ local function lex_short_string(state, quote)
 
                   if codepoint > 0x10FFFF then
                      -- UTF-8 value too large.
-                     return nil, "invalid UTF-8 escape sequence", -hexdigits-3
+                     return nil, "UTF-8 escape sequence too large", -hexdigits-size-1
                   end
                else
-                  break
+                  return nil, "UTF-8 escape sequence contained invalid character:(" .. schar(b) .. ")", -size-1
                end
+               b = next_byte(state)
             end
 
-            if b ~= BYTE_CBRACE then
-               return nil, "invalid UTF-8 escape sequence", -hexdigits-4
-            end
-
-            b = next_byte(state)  -- Skip "}".
             s = to_utf(codepoint)
          elseif b == BYTE_z then
             -- Zap following span of spaces.
@@ -574,7 +559,13 @@ local function lex_lt(state)
    local b = next_byte(state)
 
    if b == BYTE_LT then
+      local indented = false
       b = next_byte(state);
+
+      if b == BYTE_DASH then
+         indented = true
+         b = next_byte(state)
+      end
 
       local start = state.offset
       b = skip_till_newline(state, b)
@@ -584,15 +575,21 @@ local function lex_lt(state)
          return nil, "zero-length heredoc anchor"
       end
 
-      b = skip_till_heredoc_end(state, b, anchor)
+      local b, success = skip_till_heredoc_end(state, b, anchor)
       local heredoc_value = ssub(state.src, start, state.offset)
       skip_newline(state, b)
 
-      if b == "eof" then
+      if not success then
          return nil, "heredoc anchor not found"
       end
 
-      return "heredoc", "<<" .. heredoc_value
+      local buffer = "<<"
+
+      if indented then
+         buffer = buffer .. "-"
+      end
+
+      return "heredoc", buffer .. heredoc_value
    else
       return "<"
    end
