@@ -1,8 +1,9 @@
 -- lua -e 'package.path="./src/?.lua;./src/?/init.lua;"..package.path' hclua.lua
 
-local Parser = require "hclua.parser"
+local inspect = require("inspect")
+local Parser = require("hclua.parser")
 
-local asd = Parser.new_state([[
+local asd = Parser.parse([[
 locale {
     ai {
         snail {
@@ -43,9 +44,4 @@ locale {
 }
 ]])
 
-do
-   while asd.token ~= "eof" do
-      Parser.skip_token(asd)
-      print(asd.token .. " " .. tostring(asd.token_value))
-   end
-end
+print(inspect(asd))

@@ -1,8 +1,9 @@
 local Lexer = require "hclua.lexer"
+local inspect = require "inspect"
 
 local Parser = {}
 
-function Parser.new_state(src)
+local function new_state(src)
    return {
       lexer = Lexer.new_state(src),
       code_lines = {}, -- Set of line numbers containing code.
@@ -17,43 +18,47 @@ local function location(state)
    return {
       line = state.line,
       column = state.column,
-      offset = state.offset
+      offset = state.offset,
    }
 end
 
 function Parser.syntax_error(loc, end_column, msg, prev_loc, prev_end_column)
-   error(loc .. " " ..  end_column .. " " ..  msg .. " " ..  prev_loc .. " " ..  prev_end_column)
+   error(location(loc).line .. ":" .. end_column .. ": "  ..  msg .. " " ..  tostring(prev_loc) .. " " ..  tostring(prev_end_column))
 end
 
-function Parser.token_body_or_line(state)
+local function token_body_or_line(state)
    return state.lexer.src:sub(state.offset, state.lexer.offset - 1):match("^[^\r\n]*")
 end
 
-function Parser.mark_line_endings(state, first_line, last_line, token_type)
+local function mark_line_endings(state, first_line, last_line, token_type)
    for line = first_line, last_line - 1 do
       state.line_endings[line] = token_type
    end
 end
 
-function Parser.skip_token(state)
+local function token_name(token)
+   return Lexer.quote(token)
+end
+
+local function skip_token(state)
    while true do
       local err_end_column
       state.token, state.token_value, state.line,
          state.column, state.offset, err_end_column = Lexer.next_token(state.lexer)
 
       if not state.token then
-         Parser.syntax_error(state, err_end_column, state.token_value)
+         syntax_error(state, err_end_column, state.token_value)
       elseif state.token == "comment" then
          state.comments[#state.comments+1] = {
             contents = state.token_value,
             location = location(state),
-            end_column = state.column + #Parser.token_body_or_line(state) - 1
+            end_column = state.column + #token_body_or_line(state) - 1
          }
 
-         Parser.mark_line_endings(state, state.line, state.lexer.line, "comment")
+         mark_line_endings(state, state.line, state.lexer.line, "comment")
       else
          if state.token ~= "eof" then
-            Parser.mark_line_endings(state, state.line, state.lexer.line, "string")
+            mark_line_endings(state, state.line, state.lexer.line, "string")
             state.code_lines[state.line] = true
             state.code_lines[state.lexer.line] = true
          end
@@ -61,6 +66,296 @@ function Parser.skip_token(state)
          break
       end
    end
+end
+
+local function init_ast_node(node, loc, tag)
+   node.location = loc
+   node.tag = tag
+   return node
+end
+
+local function new_ast_node(state, tag)
+   return init_ast_node({}, location(state), tag)
+end
+
+local function parse_error(state, msg, prev_loc, prev_end_column)
+   local token_repr, end_column
+
+   if state.token == "eof" then
+      token_repr = "<eof>"
+      end_column = state.column
+   else
+      token_repr = token_body_or_line(state)
+      end_column = state.column + #token_repr - 1
+      token_repr = Lexer.quote(token_repr)
+   end
+
+   Parser.syntax_error(state, end_column, msg .. " near " .. token_repr, prev_loc, prev_end_column)
+end
+
+local function check_token(state, token)
+   if state.token ~= token then
+      parse_error(state, "expected " .. token_name(token))
+   end
+end
+
+local function test_and_skip_token(state, token)
+   if state.token == token then
+      skip_token(state)
+      return true
+   end
+end
+
+local function atom(tag)
+   return function(state)
+      local ast_node = new_ast_node(state, tag)
+      ast_node[1] = state.token_value
+      skip_token(state)
+      return ast_node
+   end
+end
+
+local parse_object_list
+
+local simple_expressions = {}
+
+simple_expressions.bool = atom("Boolean")
+simple_expressions.hil = atom("String")
+simple_expressions.string = atom("String")
+simple_expressions.number = atom("Number")
+simple_expressions.float = atom("Float")
+simple_expressions.name = atom("Name")
+
+simple_expressions.heredoc = simple_expressions.string
+
+simple_expressions["{"] = function(state)
+   skip_token(state)
+   return parse_object_list(state, nil, true)
+end
+
+simple_expressions["["] = function(state)
+   local ast_node = new_ast_node(state, "List")
+   local need_comma = false
+
+   while true do
+      skip_token(state)
+
+      if need_comma then
+         if not (state.token == "," or state.token == "]") then
+            parse_error("error parsing list, expected comma or list end")
+         end
+      end
+
+      if state.token == "," then
+         if not need_comma then
+            parse_error("unexpected comma found while parsing list")
+         end
+         need_comma = false
+      elseif state.token == "]" then
+         break
+      else
+         local literal_handler = simple_expressions[state.token]
+
+         if not literal_handler then
+            parse_error(state, "unexpected token while parsing list")
+         end
+
+         local rhs = literal_handler(state)
+         ast_node[#ast_node+1] = rhs
+         need_comma = true
+      end
+   end
+
+   return ast_node
+end
+
+local function parse_object(state)
+   local literal_handler = simple_expressions[state.token]
+
+   if not literal_handler then
+      parse_error(state, "Unknown token")
+   end
+
+   print("Handling: " .. state.token)
+
+   return literal_handler(state)
+end
+
+local function parse_object_item(state)
+   print("State: parse_object_item")
+   if state.token == "=" then
+      skip_token(state)
+      return parse_object(state)
+   elseif state.token == "{" then
+      return simple_expressions["{"](state)
+   else
+      parse_error(state, "Expected start of object ('{') or assignment ('=')")
+   end
+end
+
+local function parse_keys(state)
+   print("==State: parse_keys")
+   local key_count = 0
+   local keys = {}
+
+   while true do
+      if state.token == "eof" then
+         parse_error(state, "end of file reached")
+      elseif state.token == "=" then
+         if key_count > 1 then
+            parse_error(state, "nested object expected: {")
+         elseif key_count == 0 then
+            parse_error(state, "expected to find at least one object key")
+         end
+
+         break
+      elseif state.token == "{" then
+         if key_count == 0 then
+            parse_error(state, "expected identifier or string")
+         end
+
+         break
+      elseif state.token == "name" or state.token == "string" then
+         print("get key " .. state.token_value)
+         key_count = key_count + 1
+         table.insert(keys, simple_expressions[state.token](state))
+      else
+         parse_error(state, "found invalid token when parsing object keys")
+      end
+   end
+
+   return keys
+end
+
+local function find_object_value(ast_node, key)
+   for i=1, #ast_node do
+      if ast_node[i][1] == key then
+         return ast_node[i][2]
+      end
+   end
+end
+
+local function shares_key(a, b)
+   if a.tag ~= "Object" or b.tag ~= "Object" then
+      error("Cannot call shares_key with non-objects")
+   end
+
+   return false
+end
+
+local function set_object_value(ast_node, key, value)
+   for i=1, #ast_node do
+      if ast_node[i][1] == key then
+         ast_node[i][2] = value
+         return
+      end
+   end
+
+   local node = init_ast_node({ key }, nil, "Pair")
+   node[1] = key
+   node[2] = value
+   ast_node[#ast_node+1] = node
+end
+
+local function merge_objects(ast_node, keys, value)
+   local nested_value = value
+   if #keys > 1 then
+      local parent = init_ast_node({ keys[1] }, nil, "Pair")
+      for i=1, #keys+1 do
+         local key = keys[i]
+         if i == #keys then
+            parent[2] = init_ast_node({ nested_value }, nil, "Pair")
+         else
+            local new_node = init_ast_node({ key }, nil, "Pair")
+            parent[2] = new_node
+         end
+      end
+      nested_value = parent
+   end
+
+   local existing = find_object_value(ast_node, keys[1])
+   local expand = false
+
+   if existing ~= nil then
+      if existing.tag == "List" then
+         -- This is an object list. Add the object.
+         existing[#existing+1] = nested_value
+      else
+         -- We tried assigning to a value that exists already.
+         -- First, attempt to see if this is an object.
+         if existing.tag == "Object" then
+            if nested_value.tag ~= "Object" then
+               -- We tried assigning a non-object to an existing object.
+               -- Expand it into a list.
+               expand = true
+            else
+               -- If the objects share any keys (not nested),
+               -- expand into a list. Else, merge the two
+               -- objects.
+               -- TODO
+               if shares_key(existing, nested_value) then
+                  expand = true
+               else
+                  -- TODO
+                  -- merge(existing, nested_value)
+               end
+            end
+         else
+            -- We tried assigning something to a non-object.
+            -- Expand it into a list.
+            expand = true
+         end
+
+         if expand then
+            -- TODO
+         end
+      end
+   else
+      set_object_value(ast_node, keys[1], nested_value)
+   end
+end
+
+function parse_object_list(state, loc, is_nested)
+   local object_list = {location = loc, tag = "Object"}
+
+   if is_nested == nil then
+      is_nested = false
+   end
+
+   while state.token ~= "eof" do
+      -- We're inside a nested object list, so end at a CBRACE.
+      if is_nested and state.token == "}" then
+         skip_token(state)
+         return object_list
+      end
+
+      local keys = parse_keys(state)
+      local value = parse_object_item(state)
+
+      -- object lists can be optionally comma-delimited e.g. when a list of maps
+      -- is being expressed, so a comma is allowed here - it's simply consumed
+      if state.token == "," then
+         skip_token(state)
+      end
+
+      merge_objects(object_list, keys, value)
+   end
+
+   if is_nested then
+      parse_error(state, "expected end of object list")
+   end
+
+   print("END: parse_object_list")
+
+   return object_list
+end
+
+function Parser.parse(src)
+   local state = new_state(src)
+   skip_token(state)
+   local ast = parse_object_list(state)
+   check_token(state, "eof")
+   return ast, state.comments, state.code_lines, state.line_endings, state.hanging_semicolons
 end
 
 return Parser

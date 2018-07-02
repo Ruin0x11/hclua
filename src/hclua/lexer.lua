@@ -399,7 +399,6 @@ local function lex_number(state, b)
    local is_negative = false
 
    if b == BYTE_DASH then
-      print("get dash")
       b = next_byte(state)
       is_negative = true
    end
@@ -714,6 +713,8 @@ function Lexer.next_token(state)
       token_offset = state.offset + err_offset
       err_end_column = token_column + #token_body - 1
    end
+
+   print("Token: " .. token .. " " .. Lexer.quote(tostring(token_value)))
 
    return token, token_value, token_line, token_column, token_offset, err_end_column or token_column
 end

@@ -46,7 +46,7 @@ end
 
 local f100 = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 
-describe("lexer", function()
+describe("Lexer", function()
    it("parses operators correctly", function()
       assert.same({ token = "[", token_value = nil }, get_token("["))
       assert.same({ token = "{", token_value = nil }, get_token("{"))
