@@ -590,8 +590,7 @@ local function lex_lt(state)
 
       local success
       b, success = skip_till_heredoc_end(state, b, anchor)
-      local heredoc_value = ssub(state.src, start, state.offset)
-      skip_newline(state, b)
+      local heredoc_value = ssub(state.src, start, state.offset-1) .. "\n"
 
       if not success then
          return nil, "heredoc anchor not found"
@@ -726,7 +725,7 @@ function Lexer.next_token(state)
       err_end_column = token_column + #token_body - 1
    end
 
-   print("Token: " .. tostring(token) .. " " .. tostring(token_value) .. "$")
+   print("Token: " .. tostring(token) .. " " .. tostring(token_value))
 
    return token, token_value, token_line, token_column, token_offset, err_end_column or token_column
 end

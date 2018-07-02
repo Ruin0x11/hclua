@@ -1,4 +1,5 @@
 local Parser = require "hclua.parser"
+local inspect = require "inspect"
 
 local function strip_locations(ast)
    ast.location = nil
@@ -32,9 +33,12 @@ local function get_error(src)
 end
 
 describe("Parser", function()
+   assert:set_parameter("TableFormatLevel", 99)
+
    it("parses empty", function()
        assert.same({tag = "Object"}, get_ast(""))
    end)
+
    it("parses single-line comments", function()
          assert.same({
                {contents = " hogehoge",   location = {line = 1, column = 1, offset = 1}, end_column = 10},
@@ -45,6 +49,7 @@ describe("Parser", function()
 // fuga hoge
  ]]))
    end)
+
    it("parses multi-line comments", function()
          assert.same({
                {contents = " fugahoge ",   location = {line = 1, column = 1, offset = 1}, end_column = 14},
@@ -65,13 +70,16 @@ fuga
  */
  ]]))
    end)
+
    it("parses bool", function()
          assert.same({tag = "Object",
                       {tag = "Pair",
-                       {"x", tag = "Name"},
+                       {tag = "Keys",
+                        {"x", tag = "Name"}},
                        {"true", tag = "Boolean"}},
                       {tag = "Pair",
-                       {"y", tag = "Name"},
+                       {tag = "Keys",
+                        {"y", tag = "Name"}},
                        {"false", tag = "Boolean"}}
                      },
             get_ast([[
@@ -79,16 +87,20 @@ x = true
 y = false
 ]]))
    end)
+
    it("parses int", function()
          assert.same({tag = "Object",
                       {tag = "Pair",
-                       {"x", tag = "Name"},
+                       {tag = "Keys",
+                        {"x", tag = "Name"}},
                        {"1", tag = "Number"}},
                       {tag = "Pair",
-                       {"y", tag = "Name"},
+                       {tag = "Keys",
+                        {"y", tag = "Name"}},
                        {"0", tag = "Number"}},
                       {tag = "Pair",
-                       {"z", tag = "Name"},
+                       {tag = "Keys",
+                       {"z", tag = "Name"}},
                        {"-1", tag = "Number"}}
                      },
          get_ast([[
@@ -97,19 +109,20 @@ y = 0
 z = -1
 ]]))
    end)
+
    it("parses float", function()
          assert.same({tag = "Object",
                       {tag = "Pair",
-                       {"x", tag = "Name"},
+                       {tag = "Keys", {"x", tag = "Name"}},
                        {"1.0", tag = "Float"}},
                       {tag = "Pair",
-                       {"y", tag = "Name"},
+                       {tag = "Keys", {"y", tag = "Name"}},
                        {".5", tag = "Float"}},
                       {tag = "Pair",
-                       {"z", tag = "Name"},
+                       {tag = "Keys", {"z", tag = "Name"}},
                        {"-124.12", tag = "Float"}},
                       {tag = "Pair",
-                       {"w", tag = "Name"},
+                       {tag = "Keys", {"w", tag = "Name"}},
                        {"-0.524", tag = "Float"}}
                      },
          get_ast([[
@@ -119,25 +132,27 @@ z = -124.12
 w = -0.524
 ]]))
    end)
+
    it("parses empty double quoted string", function()
          assert.same({tag = "Object",
                       {tag = "Pair",
-                       {"x", tag = "Name"},
+                       {tag = "Keys", {"x", tag = "Name"}},
                        {"", tag = "String"}}},
          get_ast([[
 x = ""
 ]]))
    end)
+
    it("parses double quoted string", function()
          assert.same({tag = "Object",
                       {tag = "Pair",
-                       {"x", tag = "Name"},
+                       {tag = "Keys", {"x", tag = "Name"}},
                        {"hoge", tag = "String"}},
                       {tag = "Pair",
-                       {"y", tag = "Name"},
+                       {tag = "Keys", {"y", tag = "Name"}},
                        {"hoge \"fuga\" hoge", tag = "String"}},
                       {tag = "Pair",
-                       {"z", tag = "Name"},
+                       {tag = "Keys", {"z", tag = "Name"}},
                        {"??", tag = "String"}}},
          get_ast([[
 x = "hoge"
@@ -145,25 +160,27 @@ y = "hoge \"fuga\" hoge"
 z = "\u003F\U0000003F"
 ]]))
    end)
+
    it("parses halfwidth katakana string", function()
          assert.same({tag = "Object",
                       {tag = "Pair",
-                       {"x", tag = "Name"},
+                       {tag = "Keys", {"x", tag = "Name"}},
                        {"ｴｰﾃﾙ病", tag = "String"}}},
          get_ast([[
 x = "ｴｰﾃﾙ病"
 ]]))
    end)
+
    it("parses identifiers", function()
          assert.same({tag = "Object",
                       {tag = "Pair",
-                       {"x", tag = "Name"},
+                       {tag = "Keys", {"x", tag = "Name"}},
                        {"hoge", tag = "Name"}},
                       {tag = "Pair",
-                       {"y", tag = "Name"},
+                       {tag = "Keys", {"y", tag = "Name"}},
                        {"hoge.fuga", tag = "Name"}},
                       {tag = "Pair",
-                       {"z", tag = "Name"},
+                       {tag = "Keys", {"z", tag = "Name"}},
                        {"_000.hoge::fuga-piyo", tag = "Name"}}},
             get_ast([[
 x = hoge
@@ -171,16 +188,17 @@ y = hoge.fuga
 z = _000.hoge::fuga-piyo
 ]]))
    end)
+
    it("parses HIL", function()
          assert.same({tag = "Object",
                       {tag = "Pair",
-                       {"x", tag = "Name"},
+                       {tag = "Keys", {"x", tag = "Name"}},
                        {"${hoge}", tag = "HIL"}},
                       {tag = "Pair",
-                       {"y", tag = "Name"},
+                       {tag = "Keys", {"y", tag = "Name"}},
                        {"${hoge {\"fuga\"} hoge}", tag = "HIL"}},
                       {tag = "Pair",
-                       {"z", tag = "Name"},
+                       {tag = "Keys", {"z", tag = "Name"}},
                        {"${name(hoge)}", tag = "HIL"}}},
             get_ast([[
 x = "${hoge}"
@@ -188,21 +206,23 @@ y = "${hoge {\"fuga\"} hoge}"
 z = "${name(hoge)}"
 ]]))
    end)
+
    it("fails parsing invalid HIL", function()
          assert.same({line = 1, column = 5, end_column = 5, msg = "Unknown token near '$'"}, get_error("x = ${hoge}"))
          assert.same({line = 1, column = 5, end_column = 5, msg = "expected terminating brace"}, get_error("x = \"${{hoge}\""))
          assert.same({line = 1, column = 5, end_column = 5, msg = "unfinished string"}, get_error("x = \"${{hoge}\"\n"))
    end)
+
    it("parses heredocs", function()
          assert.same({tag = "Object",
                       {tag = "Pair",
-                       {"hoge", tag = "Name"},
+                       {tag = "Keys", {"hoge", tag = "Name"}},
                        {"<<EOF\nHello\nWorld\nEOF\n", tag = "Heredoc"}},
                       {tag = "Pair",
-                       {"fuga", tag = "Name"},
+                       {tag = "Keys", {"fuga", tag = "Name"}},
                        {"<<FOO123\n\thoge\n\tfuga\nFOO123\n", tag = "Heredoc"}},
                       {tag = "Pair",
-                       {"piyo", tag = "Name"},
+                       {tag = "Keys", {"piyo", tag = "Name"}},
                        {"<<-EOF\n\t\t\tOuter text\n\t\t\t\tIndented text\n\t\t\tEOF\n", tag = "Heredoc"}}},
             get_ast([[
 hoge = <<EOF
@@ -219,10 +239,11 @@ piyo = <<-EOF
 			EOF
 ]]))
    end)
+
    it("parses indented heredocs", function()
          assert.same({tag = "Object",
                       {tag = "Pair",
-                       {"hoge", tag = "Name"},
+                       {tag = "Keys", {"hoge", tag = "Name"}},
                        {"<<-EOF\n    Hello\n      World\n    EOF\n", tag = "Heredoc"}}},
             get_ast([[
 hoge = <<-EOF
@@ -231,44 +252,278 @@ hoge = <<-EOF
     EOF
 ]]))
    end)
+
    it("parses empty single quoted string", function()
          assert.same({tag = "Object",
                       {tag = "Pair",
-                       {"x", tag = "Name"},
+                       {tag = "Keys", {"x", tag = "Name"}},
                        {"", tag = "String"}}},
             get_ast([[
 x = ''
 ]]))
    end)
+
    it("parses single quoted string", function()
          assert.same({tag = "Object",
                       {tag = "Pair",
-                       {"x", tag = "Name"},
+                       {tag = "Keys", {"x", tag = "Name"}},
                        {"foo bar \"foo bar\"", tag = "String"}}},
             get_ast([[
 x = 'foo bar "foo bar"'
 ]]))
    end)
+
    it("parses list", function()
          assert.same({tag = "Object",
                       {tag = "Pair",
-                       {"x", tag = "Name"},
+                       {tag = "Keys", {"x", tag = "Name"}},
+                       {tag = "List",
+                        {"1", tag = "Number"},
+                        {"2", tag = "Number"},
+                        {"3", tag = "Number"}}},
+                      {tag = "Pair",
+                       {tag = "Keys", {"y", tag = "Name"}},
                        {tag = "List"}},
                       {tag = "Pair",
-                       {"y", tag = "Name"},
-                       {tag = "List"}},
+                       {tag = "Keys", {"z", tag = "Name"}},
+                       {tag = "List",
+                        {"", tag = "String"},
+                        {"", tag = "String"}}},
                       {tag = "Pair",
-                       {"z", tag = "Name"},
-                       {tag = "List"}},
-                      {tag = "Pair",
-                       {"w", tag = "Name"},
-                       {tag = "List"}}
+                       {tag = "Keys", {"w", tag = "Name"}},
+                       {tag = "List",
+                        {"1", tag = "Number"},
+                        {"string", tag = "String"},
+                        {"<<EOF\nheredoc contents\nEOF\n", tag = "Heredoc"}}}
                      },
             get_ast([[
 x = [1, 2, 3]
 y = []
 z = ["", "", ]
-w = [1, "string", <<EOF\nheredoc contents\nEOF]
+w = [1, "string", <<EOF
+heredoc contents
+EOF]
 ]]))
+   end)
+
+   it("parses list of maps", function()
+         assert.same({tag = "Object",
+                      {tag = "Pair",
+                       {tag = "Keys", {"foo", tag = "Name"}},
+                       {tag = "List",
+                        {tag = "Object",
+                         {tag = "Pair",
+                          {tag = "Keys", {"key", tag = "Name"}},
+                          {"hoge", tag = "String"}}},
+                        {tag = "Object",
+                         {tag = "Pair",
+                          {tag = "Keys", {"key", tag = "Name"}},
+                          {"fuga", tag = "String"}},
+                         {tag = "Pair",
+                          {tag = "Keys", {"key2", tag = "Name"}},
+                          {"piyo", tag = "String"}}}}}},
+         get_ast([[
+foo = [
+  {key = "hoge"},
+  {key = "fuga", key2 = "piyo"},
+]
+]]))
+   end)
+
+   it("parses leading comment in list", function()
+         assert.same({tag = "Object",
+                      {tag = "Pair",
+                       {tag = "Keys", {"foo", tag = "Name"}},
+                       {tag = "List",
+                        {"1", tag = "Number"},
+                        {"2", tag = "Number"},
+                        {"3", tag = "Number"}}}},
+         get_ast([[
+foo = [
+1,
+# bar
+2,
+3,
+]
+]]))
+   end)
+
+   it("parses empty object type", function()
+         assert.same({tag = "Object",
+                      {tag = "Pair",
+                       {tag = "Keys", {"foo", tag = "Name"}},
+                       {tag = "Object"}}},
+         get_ast([[
+foo = {}
+]]))
+   end)
+
+   it("parses object type with two fields", function()
+         assert.same({tag = "Object",
+                      {tag = "Pair",
+                       {tag = "Keys", {"foo", tag = "Name"}},
+                       {tag = "Object",
+                        {tag = "Pair",
+                         {tag = "Keys", {"bar", tag = "Name"}},
+                         {"hoge", tag = "String"}},
+                        {tag = "Pair",
+                         {tag = "Keys", {"baz", tag = "Name"}},
+                         {tag = "List",
+                          {"piyo", tag = "String"}}}}}},
+         get_ast([[
+foo = {
+    bar = "hoge"
+    baz = ["piyo"]
+}
+]]))
+   end)
+
+   it("parses object with nested empty map", function()
+         assert.same({tag = "Object",
+                      {tag = "Pair",
+                       {tag = "Keys", {"foo", tag = "Name"}},
+                       {tag = "Object",
+                        {tag = "Pair",
+                         {tag = "Keys", {"bar", tag = "Name"}},
+                         {tag = "Object"}}}}},
+         get_ast([[
+foo = {
+    bar = {}
+}
+]]))
+   end)
+
+   it("parses object with nested empty map and value", function()
+         assert.same({tag = "Object",
+                      {tag = "Pair",
+                       {tag = "Keys", {"foo", tag = "Name"}},
+                       {tag = "Object",
+                        {tag = "Pair",
+                         {tag = "Keys", {"bar", tag = "Name"}},
+                         {tag = "Object"}},
+                        {tag = "Pair",
+                         {tag = "Keys", {"foo", tag = "Name"}},
+                         {"true", tag = "Boolean"}}}}},
+         get_ast([[
+foo = {
+    bar = {}
+    foo = true
+}
+]]))
+   end)
+
+   it("parses object keys", function()
+         assert.same({tag = "Object", {tag = "Pair",
+ {tag = "Keys", {"foo", tag = "Name"}}, {tag = "Object"}}}, get_ast([[foo {}]]))
+         assert.same({tag = "Object", {tag = "Pair",
+ {tag = "Keys", {"foo", tag = "Name"}}, {tag = "Object"}}}, get_ast([[foo = {}]]))
+         assert.same({tag = "Object", {tag = "Pair",
+ {tag = "Keys", {"foo", tag = "Name"}}, {"bar", tag = "Name"}}},
+            get_ast([[foo = bar]]))
+         assert.same({tag = "Object", {tag = "Pair",
+ {tag = "Keys", {"foo", tag = "Name"}}, {"123", tag = "Number"}}},
+            get_ast([[foo = 123]]))
+         assert.same({tag = "Object", {tag = "Pair",
+ {tag = "Keys", {"foo", tag = "Name"}}, {"${var.bar}", tag = "HIL"}}},
+            get_ast([[foo = "${var.bar}]]))
+         assert.same({tag = "Object", {tag = "Pair",
+ {tag = "Keys", {"foo", tag = "String"}}, {tag = "Object"}}},
+            get_ast([["foo" {}]]))
+         assert.same({tag = "Object", {tag = "Pair",
+ {tag = "Keys", {"foo", tag = "String"}}, {"${var.bar}", tag = "HIL"}}},
+            get_ast([["foo" = "${var.bar}]]))
+         assert.same({tag = "Object",
+                      {tag = "Pair",
+                       {tag = "Keys", {"foo", tag = "Name"}, {"bar", tag = "Name"}},
+                       {tag = "Object"}}},
+            get_ast([[foo bar {}]]))
+         assert.same({tag = "Object",
+                      {tag = "Pair",
+                       {tag = "Keys", {"foo", tag = "Name"}, {"bar", tag = "String"}},
+                       {tag = "Object"}}},
+            get_ast([[foo "bar" {}]]))
+         assert.same({tag = "Object",
+                      {tag = "Pair",
+                       {tag = "Keys", {"foo", tag = "String"}, {"bar", tag = "Name"}},
+                       {tag = "Object"}}},
+            get_ast([["foo" bar {}]]))
+         assert.same({tag = "Object",
+                      {tag = "Pair",
+                       {tag = "Keys", {"foo", tag = "Name"}, {"bar", tag = "Name"}, {"baz", tag = "Name"}},
+                       {tag = "Object"}}},
+            get_ast([[foo bar baz {}]]))
+   end)
+
+   it("fails parsing invalid keys", function()
+         assert.same({line = 1, column = 5, end_column = 6, msg = "found invalid token when parsing object keys near '12'"},
+            get_error("foo 12 {}"))
+         assert.same({line = 1, column = 9, end_column = 9, msg = "nested object expected: { near '='"},
+            get_error("foo bar = {}"))
+         assert.same({line = 1, column = 5, end_column = 5, msg = "found invalid token when parsing object keys near '['"},
+            get_error("foo []"))
+         assert.same({line = 1, column = 1, end_column = 2, msg = "found invalid token when parsing object keys near '12'"},
+            get_error("12 {}"))
+   end)
+
+   it("parses nested assignment to string and ident", function()
+         assert.same({tag = 'Object',
+                      {tag = 'Pair',
+                       {tag = 'Keys',
+                        {'foo', tag = 'Name' },
+                        {'bar', tag = 'String' },
+                        {'baz', tag = 'Name' }},
+                       {tag = 'Object',
+                        {tag = 'Pair',
+                         {tag = 'Keys',
+                          {'hoge', tag = 'String' }},
+                         {'fuge', tag = 'Name' }}}},
+                      {tag = 'Pair',
+                       {tag = 'Keys',
+                        {'foo', tag = 'String' },
+                        {'bar', tag = 'Name' },
+                        {'baz', tag = 'Name' }},
+                       {tag = 'Object',
+                        {tag = 'Pair',
+                         {tag = 'Keys',
+                          {'hogera', tag = 'Name' }},
+                         {'fugera', tag = 'String' }}}}},
+            get_ast([[
+foo "bar" baz { "hoge" = fuge }
+"foo" bar baz { hogera = "fugera" }
+]]))
+   end)
+
+   it("parses nested assignment with object", function()
+         assert.same({tag = 'Object',
+ {tag = 'Pair',
+  {tag = 'Keys',
+   {'foo', tag = 'Name' }},
+  {'6', tag = 'Number' }},
+ {tag = 'Pair',
+  {tag = 'Keys',
+   {'foo', tag = 'Name' },
+   {'bar', tag = 'String' }},
+  {tag = 'Object' ,
+   {tag = 'Pair',
+    {tag = 'Keys',
+     {'hoge', tag = 'Name' }},
+    {'piyo', tag = 'String' }}}}},
+         get_ast([[
+foo = 6
+foo "bar" { hoge = "piyo" }
+]]))
+   end)
+
+   it("parses comment group", function()
+         assert.same({tag = "Object"}, get_ast("# Hello\n# World\n"))
+         assert.same({tag = "Object"}, get_ast("# Hello\r\n# Windows"))
+   end)
+
+   it("parses comment after line", function()
+         assert.same({tag = "Object", {tag = "Pair",
+                                       {tag = "Keys",
+                                        {"x", tag = "Name"}},
+                                       {"1", tag = "Number"}}},
+            get_ast("x = 1 # hogehoge"))
    end)
 end)

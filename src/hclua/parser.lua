@@ -151,22 +151,23 @@ end
 simple_expressions["["] = function(state)
    local ast_node = new_ast_node(state, "List")
    local need_comma = false
+   skip_token(state)
 
    while true do
-      skip_token(state)
-
       if need_comma then
          if not (state.token == "," or state.token == "]") then
-            parse_error("error parsing list, expected comma or list end")
+            parse_error(state, "error parsing list, expected comma or list end")
          end
       end
 
       if state.token == "," then
+         skip_token(state)
          if not need_comma then
-            parse_error("unexpected comma found while parsing list")
+            parse_error(state, "unexpected comma found while parsing list")
          end
          need_comma = false
       elseif state.token == "]" then
+         skip_token(state)
          break
       else
          local literal_handler = simple_expressions[state.token]
@@ -195,7 +196,6 @@ local function parse_object(state)
 end
 
 local function parse_object_item(state)
-   print("State: parse_object_item")
    if state.token == "=" then
       skip_token(state)
       return parse_object(state)
@@ -207,9 +207,8 @@ local function parse_object_item(state)
 end
 
 local function parse_keys(state)
-   print("==State: parse_keys " .. state.token .. " " .. tostring(state.token_value))
    local key_count = 0
-   local keys = {}
+   local keys = new_ast_node(state, "Keys")
 
    while true do
       if state.token == "eof" then
@@ -229,9 +228,8 @@ local function parse_keys(state)
 
          break
       elseif state.token == "name" or state.token == "string" then
-         print("get key " .. state.token_value)
          key_count = key_count + 1
-         table.insert(keys, simple_expressions[state.token](state))
+         keys[#keys+1] = simple_expressions[state.token](state)
       else
          parse_error(state, "found invalid token when parsing object keys")
       end
@@ -240,93 +238,103 @@ local function parse_keys(state)
    return keys
 end
 
-local function find_object_value(ast_node, key)
-   for i=1, #ast_node do
-      if ast_node[i][1] == key then
-         return ast_node[i][2]
-      end
-   end
-end
-
-local function shares_key(a, b)
-   if a.tag ~= "Object" or b.tag ~= "Object" then
-      error("Cannot call shares_key with non-objects")
-   end
-
-   return false
-end
-
-local function set_object_value(ast_node, key, value)
-   for i=1, #ast_node do
-      if ast_node[i][1] == key then
-         ast_node[i][2] = value
-         return
-      end
-   end
-
-   local node = init_ast_node({ key }, nil, "Pair")
-   node[1] = key
-   node[2] = value
-   ast_node[#ast_node+1] = node
-end
-
-local function merge_objects(ast_node, keys, value)
-   local nested_value = value
-   if #keys > 1 then
-      local parent = init_ast_node({ keys[1] }, nil, "Pair")
-      for i=1, #keys+1 do
-         local key = keys[i]
-         if i == #keys then
-            parent[2] = init_ast_node({ nested_value }, nil, "Pair")
-         else
-            local new_node = init_ast_node({ key }, nil, "Pair")
-            parent[2] = new_node
-         end
-      end
-      nested_value = parent
-   end
-
-   local existing = find_object_value(ast_node, keys[1])
-   local expand = false
-
-   if existing ~= nil then
-      if existing.tag == "List" then
-         -- This is an object list. Add the object.
-         existing[#existing+1] = nested_value
-      else
-         -- We tried assigning to a value that exists already.
-         -- First, attempt to see if this is an object.
-         if existing.tag == "Object" then
-            if nested_value.tag ~= "Object" then
-               -- We tried assigning a non-object to an existing object.
-               -- Expand it into a list.
-               expand = true
-            else
-               -- If the objects share any keys (not nested),
-               -- expand into a list. Else, merge the two
-               -- objects.
-               -- TODO
-               if shares_key(existing, nested_value) then
-                  expand = true
-               else
-                  -- TODO
-                  -- merge(existing, nested_value)
-               end
-            end
-         else
-            -- We tried assigning something to a non-object.
-            -- Expand it into a list.
-            expand = true
-         end
-
-         if expand then
-            -- TODO
-         end
-      end
-   else
-      set_object_value(ast_node, keys[1], nested_value)
-   end
-end
+-- local function find_object_value(ast_node, key)
+--    for i=1, #ast_node do
+--       if ast_node[i][1] == key then
+--          return ast_node[i][2]
+--       end
+--    end
+-- end
+--
+-- local function shares_key(a, b)
+--    if a.tag ~= "Object" or b.tag ~= "Object" then
+--       error("Cannot call shares_key with non-objects")
+--    end
+--
+--    return false
+-- end
+--
+-- local function set_object_value(ast_node, key, value)
+--    print("------set: \n" .. inspect(ast_node))
+--    print("------on:  \n" .. inspect(key))
+--    print("------to:  \n" .. inspect(value))
+--    for i=1, #ast_node do
+--       if ast_node[i][1] == key then
+--          ast_node[i][2] = value
+--          return
+--       end
+--    end
+--
+--    local node = init_ast_node({ key }, nil, "Pair")
+--    node[1] = key
+--    node[2] = value
+--    ast_node[#ast_node+1] = node
+-- end
+--
+-- local function merge_objects(ast_node, keys, value)
+--    print("======= before")
+--    print(inspect(ast_node))
+--    print(inspect(value))
+--    print(inspect(keys))
+--    local nested_value = value
+--    if #keys > 1 then
+--       local parent = init_ast_node({ keys[1] }, nil, "Pair")
+--       for i=1, #keys+1 do
+--          local key = keys[i]
+--          if i == #keys then
+--             parent[2] = init_ast_node({ nested_value }, nil, "Pair")
+--          else
+--             local new_node = init_ast_node({ key }, nil, "Pair")
+--             parent[2] = new_node
+--          end
+--       end
+--       nested_value = parent
+--    end
+--
+--    local existing = find_object_value(ast_node, keys[1])
+--    local expand = false
+--
+--    if existing ~= nil then
+--       if existing.tag == "List" then
+--          -- This is an object list. Add the object.
+--          existing[#existing+1] = nested_value
+--       else
+--          -- We tried assigning to a value that exists already.
+--          -- First, attempt to see if this is an object.
+--          if existing.tag == "Object" then
+--             if nested_value.tag ~= "Object" then
+--                -- We tried assigning a non-object to an existing object.
+--                -- Expand it into a list.
+--                expand = true
+--             else
+--                -- If the objects share any keys (not nested),
+--                -- expand into a list. Else, merge the two
+--                -- objects.
+--                -- TODO
+--                if shares_key(existing, nested_value) then
+--                   expand = true
+--                else
+--                   -- TODO
+--                   -- merge(existing, nested_value)
+--                end
+--             end
+--          else
+--             -- We tried assigning something to a non-object.
+--             -- Expand it into a list.
+--             expand = true
+--          end
+--
+--          if expand then
+--             -- TODO
+--          end
+--       end
+--    else
+--       set_object_value(ast_node, keys[1], nested_value)
+--    end
+--    print("======= after")
+--    print(inspect(ast_node))
+--    print("======= end")
+-- end
 
 function parse_object_list(state, loc, is_nested)
    local object_list = {location = loc, tag = "Object"}
@@ -342,11 +350,8 @@ function parse_object_list(state, loc, is_nested)
          return object_list
       end
 
-      print("==KEYS " .. state.token)
       local keys = parse_keys(state)
-      print("==VALUE " .. state.token)
       local value = parse_object_item(state)
-      print("==AFTER " .. state.token)
 
       -- object lists can be optionally comma-delimited e.g. when a list of maps
       -- is being expressed, so a comma is allowed here - it's simply consumed
@@ -354,7 +359,9 @@ function parse_object_list(state, loc, is_nested)
          skip_token(state)
       end
 
-      merge_objects(object_list, keys, value)
+      -- Defer merging of nested maps to the decoding stage.
+      local node = init_ast_node({keys, value}, location(state), "Pair")
+      object_list[#object_list+1] = node
    end
 
    if is_nested then
