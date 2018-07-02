@@ -526,4 +526,85 @@ foo "bar" { hoge = "piyo" }
                                        {"1", tag = "Number"}}},
             get_ast("x = 1 # hogehoge"))
    end)
+
+   it("parses official HCL tests", function()
+         local files = {
+            {"assign_colon.hcl", {line = 2,
+                                  column = 7,
+                                  end_column = 7,
+                                  msg = "found invalid token when parsing object keys near ':'"}},
+            {"comment.hcl", nil},
+            {"comment_crlf.hcl", nil},
+            {"comment_lastline.hcl", nil},
+            {"comment_single.hcl", nil},
+            {"empty.hcl", nil},
+            {"list_comma.hcl", nil},
+            {"multiple.hcl", nil},
+            {"object_list_comma.hcl", nil},
+            {"structure.hcl", nil},
+            {"structure_basic.hcl", nil},
+            {"structure_empty.hcl", nil},
+            {"complex.hcl", nil},
+            {"complex_crlf.hcl", nil},
+            {"types.hcl", nil},
+            {"array_comment.hcl", nil},
+            {"array_comment_2.hcl", {line = 4,
+                                     column = 5,
+                                     end_column = 47,
+                                     msg = "error parsing list, expected comma or list end near '\"${path.module}/scripts/install-haproxy.sh\"'"}},
+            {"missing_braces.hcl", {line = 3,
+                                    column = 22,
+                                    end_column = 22,
+                                    msg = "found invalid token when parsing object keys near '$'"}},
+            {"unterminated_object.hcl", {line = 3,
+                                         column = 1,
+                                         end_column = 1,
+                                         msg = "expected end of object list near <eof>"}},
+            {"unterminated_object_2.hcl", {line = 7,
+                                           column = 1,
+                                           end_column = 1,
+                                           msg = "expected end of object list near <eof>"}},
+            {"key_without_value.hcl", {line = 2,
+                                       column = 1,
+                                       end_column = 1,
+                                       msg = "end of file reached near <eof>"}},
+            {"object_key_without_value.hcl", {line = 3,
+                                              column = 1,
+                                              end_column = 1,
+                                              msg = "found invalid token when parsing object keys near '}'"}},
+            {"object_key_assign_without_value.hcl", {line = 3,
+                                                     column = 1,
+                                                     end_column = 1,
+                                                     msg = "Unknown token near '}'"}},
+            {"object_key_assign_without_value2.hcl", {line = 4,
+                                                      column = 1,
+                                                      end_column = 1,
+                                                      msg = "Unknown token near '}'"}},
+            {"object_key_assign_without_value3.hcl", {line = 3,
+                                                      column = 7,
+                                                      end_column = 7,
+                                                      msg = "expected to find at least one object key near '='"}},
+            {"git_crypt.hcl", {line = 1,
+                               column = 1,
+                               end_column = 1,
+                               msg = "found invalid token when parsing object keys near '\\0'"}}}
+
+         local function read_all(file)
+            local f = assert(io.open(file, "rb"))
+            local content = f:read("*all")
+            f:close()
+            return content
+         end
+
+         for _, pair in pairs(files) do
+            local filename, should_fail = table.unpack(pair)
+            local src = read_all("spec/test_fixtures/parser/" .. filename)
+            local ok, err = pcall(Parser.parse, src)
+            if ok then
+               err = nil
+            end
+            assert.same(should_fail, err, "Expected objects to be the same: " .. filename)
+         end
+   end)
 end)
+
