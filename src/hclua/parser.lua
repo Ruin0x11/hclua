@@ -1,4 +1,5 @@
 local Lexer = require "hclua.lexer"
+local Util = require "hclua.util"
 local inspect = require "inspect"
 
 local Parser = {}
@@ -22,8 +23,23 @@ local function location(state)
    }
 end
 
+Parser.SyntaxError = Util.class()
+
+function Parser.SyntaxError:__init(loc, end_column, msg, prev_loc, prev_end_column)
+   self.line = loc.line
+   self.column = loc.column
+   self.end_column = end_column
+   self.msg = msg
+
+   if prev_loc then
+      self.prev_line = prev_loc.line
+      self.prev_column = prev_loc.column
+      self.prev_end_column = prev_end_column
+   end
+end
+
 function Parser.syntax_error(loc, end_column, msg, prev_loc, prev_end_column)
-   error(location(loc).line .. ":" .. end_column .. ": "  ..  msg .. " " ..  tostring(prev_loc) .. " " ..  tostring(prev_end_column))
+   error(Parser.SyntaxError(loc, end_column, msg, prev_loc, prev_end_column), 0)
 end
 
 local function token_body_or_line(state)
@@ -47,7 +63,7 @@ local function skip_token(state)
          state.column, state.offset, err_end_column = Lexer.next_token(state.lexer)
 
       if not state.token then
-         syntax_error(state, err_end_column, state.token_value)
+         Parser.syntax_error(state, err_end_column, state.token_value)
       elseif state.token == "comment" then
          state.comments[#state.comments+1] = {
             contents = state.token_value,
@@ -120,13 +136,12 @@ local parse_object_list
 local simple_expressions = {}
 
 simple_expressions.bool = atom("Boolean")
-simple_expressions.hil = atom("String")
+simple_expressions.hil = atom("HIL")
 simple_expressions.string = atom("String")
 simple_expressions.number = atom("Number")
 simple_expressions.float = atom("Float")
 simple_expressions.name = atom("Name")
-
-simple_expressions.heredoc = simple_expressions.string
+simple_expressions.heredoc = atom("Heredoc")
 
 simple_expressions["{"] = function(state)
    skip_token(state)
@@ -176,8 +191,6 @@ local function parse_object(state)
       parse_error(state, "Unknown token")
    end
 
-   print("Handling: " .. state.token)
-
    return literal_handler(state)
 end
 
@@ -194,7 +207,7 @@ local function parse_object_item(state)
 end
 
 local function parse_keys(state)
-   print("==State: parse_keys")
+   print("==State: parse_keys " .. state.token .. " " .. tostring(state.token_value))
    local key_count = 0
    local keys = {}
 
@@ -329,8 +342,11 @@ function parse_object_list(state, loc, is_nested)
          return object_list
       end
 
+      print("==KEYS " .. state.token)
       local keys = parse_keys(state)
+      print("==VALUE " .. state.token)
       local value = parse_object_item(state)
+      print("==AFTER " .. state.token)
 
       -- object lists can be optionally comma-delimited e.g. when a list of maps
       -- is being expressed, so a comma is allowed here - it's simply consumed
@@ -344,8 +360,6 @@ function parse_object_list(state, loc, is_nested)
    if is_nested then
       parse_error(state, "expected end of object list")
    end
-
-   print("END: parse_object_list")
 
    return object_list
 end

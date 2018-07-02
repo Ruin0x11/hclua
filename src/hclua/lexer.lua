@@ -25,7 +25,7 @@ local BYTE_EQ, BYTE_NE = sbyte("="), sbyte("~")
 local BYTE_LT, BYTE_GT = sbyte("<"), sbyte(">")
 local BYTE_LF, BYTE_CR = sbyte("\n"), sbyte("\r")
 local BYTE_HASH, BYTE_STAR = sbyte("#"), sbyte("*")
-local BYTE_DOLLAR = sbyte("$")
+local BYTE_DOLLAR, BYTE_COMMA = sbyte("$"), sbyte(",")
 local BYTE_SPACE, BYTE_FF, BYTE_TAB, BYTE_VTAB = sbyte(" "), sbyte("\f"), sbyte("\t"), sbyte("\v")
 
 local function to_hex(b)
@@ -48,8 +48,12 @@ local function to_dec(b)
    end
 end
 
+local function is_ascii(codepoint)
+   return codepoint < 0x80
+end
+
 local function to_utf(codepoint)
-   if codepoint < 0x80 then  -- ASCII?
+   if is_ascii(codepoint) then  -- ASCII?
       return schar(codepoint)
    end
 
@@ -64,6 +68,10 @@ local function to_utf(codepoint)
 
    buf[#buf+1] = schar(0xFE - mfb*2 + codepoint)
    return sreverse(tconcat(buf))
+end
+
+local function is_utf(codepoint)
+   return not is_ascii(codepoint) and to_utf(codepoint)
 end
 
 local function is_alpha(b)
@@ -81,9 +89,9 @@ local function is_space(b)
 end
 
 local function is_ident_char(b)
-   return b ~= BYTE_SPACE and (is_alpha(b) or to_dec(b) or b == BYTE_LDASH or b == BYTE_DASH
+   return (is_alpha(b) or to_dec(b) or b == BYTE_LDASH or b == BYTE_DASH
       or b == BYTE_DOT or b == BYTE_COLON or b == BYTE_SLASH
-                                  or to_utf(b))
+              or is_utf(b))
 end
 
 local simple_escapes = {
@@ -362,6 +370,10 @@ local function lex_short_string(state, quote)
       end
    end
 
+   if b == nil and braces ~= 0 then
+      return nil, "expected terminating brace"
+   end
+
    -- Offset now points at the closing quote.
    local string_value
 
@@ -535,7 +547,7 @@ local function lex_slash(state)
       if b == nil then
          return nil, "expected multiline comment end", b
       end
-      local comment_value = ssub(state.src, start, state.offset-1)
+      local comment_value = ssub(state.src, start, state.offset-2)
       next_byte(state)
       return "comment", comment_value
    elseif b == BYTE_SLASH then
@@ -714,7 +726,7 @@ function Lexer.next_token(state)
       err_end_column = token_column + #token_body - 1
    end
 
-   print("Token: " .. token .. " " .. Lexer.quote(tostring(token_value)))
+   print("Token: " .. tostring(token) .. " " .. tostring(token_value) .. "$")
 
    return token, token_value, token_line, token_column, token_offset, err_end_column or token_column
 end
