@@ -389,9 +389,6 @@ local function lex_short_string(state, quote)
 end
 
 -- Payload for a number is simply a substring.
--- Luacheck is supposed to be forward-compatible with Lua 5.3 and LuaJIT syntax, so
---    parsing it into actual number may be problematic.
--- It is not needed currently anyway as Luacheck does not do static evaluation yet.
 local function lex_number(state, b)
    local start = state.offset
 
@@ -399,6 +396,13 @@ local function lex_number(state, b)
    local is_digit = to_dec
    local has_digits = false
    local is_float = false
+   local is_negative = false
+
+   if b == BYTE_DASH then
+      print("get dash")
+      b = next_byte(state)
+      is_negative = true
+   end
 
    if b == BYTE_0 then
       b = next_byte(state)
@@ -504,10 +508,8 @@ local function lex_ident(state)
 
    local ident = ssub(state.src, start, state.offset-1)
 
-   if ident == "true" then
-      return "bool", true
-   elseif ident == "false" then
-      return "bool", false
+   if ident == "true" or ident == "false" then
+      return "bool", ident
    end
 
    return "name", ident
@@ -575,7 +577,8 @@ local function lex_lt(state)
          return nil, "zero-length heredoc anchor"
       end
 
-      local b, success = skip_till_heredoc_end(state, b, anchor)
+      local success
+      b, success = skip_till_heredoc_end(state, b, anchor)
       local heredoc_value = ssub(state.src, start, state.offset)
       skip_newline(state, b)
 
@@ -604,6 +607,7 @@ local function lex_dash(state)
    local b = next_byte(state)
    if b ~= nil and to_dec(b) then
       state.offset = state.offset - 1
+      b = BYTE_DASH
       return lex_number(state, b)
    end
    return "-"
@@ -613,6 +617,7 @@ local function lex_dot(state)
    local b = next_byte(state)
    if b ~= nil and to_dec(b) then
       state.offset = state.offset - 1
+      b = BYTE_DOT
       return lex_number(state, b)
    end
    return "."
