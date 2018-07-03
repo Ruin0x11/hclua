@@ -22,4 +22,11 @@ function Util.is_instance(object, class)
    return rawequal(debug.getmetatable(object), class)
 end
 
+function Util.read_to_string(file)
+   local f = assert(io.open(file, "rb"))
+   local content = f:read("*all")
+   f:close()
+   return content
+end
+
 return Util

@@ -1,4 +1,5 @@
 local Parser = require "hclua.parser"
+local Util = require "hclua.util"
 local inspect = require "inspect"
 
 local function strip_locations(ast)
@@ -210,7 +211,7 @@ z = "${name(hoge)}"
    it("fails parsing invalid HIL", function()
          assert.same({line = 1, column = 5, end_column = 5, msg = "Unknown token near '$'"}, get_error("x = ${hoge}"))
          assert.same({line = 1, column = 5, end_column = 5, msg = "expected terminating brace"}, get_error("x = \"${{hoge}\""))
-         assert.same({line = 1, column = 5, end_column = 5, msg = "unfinished string"}, get_error("x = \"${{hoge}\"\n"))
+         assert.same({line = 1, column = 5, end_column = 5, msg = "expected terminating brace"}, get_error("x = \"${{hoge}\"\n"))
    end)
 
    it("parses heredocs", function()
@@ -589,16 +590,9 @@ foo "bar" { hoge = "piyo" }
                                end_column = 1,
                                msg = "found invalid token when parsing object keys near '\\0'"}}}
 
-         local function read_all(file)
-            local f = assert(io.open(file, "rb"))
-            local content = f:read("*all")
-            f:close()
-            return content
-         end
-
          for _, pair in pairs(files) do
             local filename, should_fail = table.unpack(pair)
-            local src = read_all("spec/test_fixtures/parser/" .. filename)
+            local src = Util.read_to_string("spec/test_fixtures/parser/" .. filename)
             local ok, err = pcall(Parser.parse, src)
             if ok then
                err = nil

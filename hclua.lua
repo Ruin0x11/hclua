@@ -2,6 +2,7 @@
 
 local inspect = require("inspect")
 local Parser = require("hclua.parser")
+local Decoder = require("hclua.decoder")
 
 local asd = Parser.parse([[
 locale {
@@ -44,4 +45,8 @@ locale {
 }
 ]])
 
-print(inspect(asd))
+-- print(inspect(asd))
+
+local zsc = Decoder.decode(asd)
+print(inspect(zxc))
+

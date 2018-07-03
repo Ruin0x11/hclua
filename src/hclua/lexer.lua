@@ -363,7 +363,7 @@ local function lex_short_string(state, quote)
 
          -- Next chunk starts after escape sequence.
          chunk_start = state.offset
-      elseif b == nil or is_newline(b) then
+      elseif b == nil or (is_newline(b) and braces == 0) then
          return nil, "unfinished string"
       else
          b = next_byte(state)
@@ -724,8 +724,6 @@ function Lexer.next_token(state)
       token_offset = state.offset + err_offset
       err_end_column = token_column + #token_body - 1
    end
-
-   print("Token: " .. tostring(token) .. " " .. tostring(token_value))
 
    return token, token_value, token_line, token_column, token_offset, err_end_column or token_column
 end
