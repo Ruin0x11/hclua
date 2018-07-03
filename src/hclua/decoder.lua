@@ -1,5 +1,3 @@
-local inspect = require "inspect"
-
 local Decoder = {}
 
 local sfind = string.find
@@ -97,8 +95,6 @@ decode_handlers["Heredoc"] = function(ast_node)
    end
 
    local whitespace_prefix = lines[#lines]
-   print("Text: '" .. content .. "'")
-   print("Prefix: '" .. whitespace_prefix .. "'")
 
    local indented = true
    for _, line in pairs(lines) do
@@ -118,8 +114,13 @@ decode_handlers["Heredoc"] = function(ast_node)
    -- If all lines are not at least as indented as the terminating mark, return the
    -- heredoc as is, but trim the leading space from the marker on the final line.
    if not indented then
-      local function trim_right(str) return sgmatch(str, "(.-)%s*$") end
-      return trim_right(content)
+      local function trim_right(s)
+         local n = #s
+         while n > 0 and s:find("^%s", n) do n = n - 1 end
+         return ssub(s, 1, n)
+      end
+
+      return trim_right(content) .. "\n"
    end
 
    local unindented_lines = {}
@@ -131,7 +132,6 @@ decode_handlers["Heredoc"] = function(ast_node)
 
       local line = lines[i]
       unindented_lines[i] = sgsub(line, "^(" .. whitespace_prefix .. ")", "")
-      print("Line: '" .. unindented_lines[i] .. "'")
    end
 
    return join_strings(unindented_lines, "\n")
@@ -152,7 +152,46 @@ function decode_value(ast_node)
 end
 
 local function is_list(state)
-   return state[1] ~= nil
+   return type(state) == "table" and state[1] ~= nil
+end
+
+local function is_object(state)
+   return type(state) == "table" and not is_list(state)
+end
+
+-- Only checks the root level, not nested.
+local function objects_share_keys(a, b)
+   for key, value in pairs(b) do
+      if a[key] then
+         return true
+      end
+   end
+
+   return false
+end
+
+local function merge_objects(this, other)
+   if this == other then
+      decode_error("merge_objects was called on the same object: " .. tostring(this))
+   end
+
+   if not (is_object(this) and is_object(other)) then
+      decode_error("merge_objects was called with non-objects: "
+                      .. tostring(this) .. " " .. tostring(other))
+   end
+
+   for key, value in pairs(other) do
+      local tmp = this[key]
+      if tmp then
+         if is_object(tmp) and is_object(value) then
+            merge_objects(tmp, value)
+         else
+            this[key] = value
+         end
+      else
+         this[key] = value
+      end
+   end
 end
 
 local function decode_object_pair(ast_node, object)
@@ -161,7 +200,8 @@ local function decode_object_pair(ast_node, object)
 
    local keys = ast_node[1]
    check_tag(keys, "Keys")
-   local nested = {}
+   local parent = {}
+   local nested = parent
    if #keys > 1 then
       for i=2,#keys-1 do
          local key = keys[i][1]
@@ -169,13 +209,49 @@ local function decode_object_pair(ast_node, object)
          nested = nested[key]
       end
       nested[keys[#keys][1]] = value
-      value = nested
+      value = parent
    end
 
    local first_key = keys[1][1]
    local existing = object[first_key]
+   local expand = false
 
    if existing then
+      -- This is an object list. Add the object.
+      if is_list(existing) then
+         existing[#existing+1] = value
+      else
+         -- We tried assigning to a value that exists already.
+         -- First, attempt to see if this is an object.
+         if is_object(existing) then
+            if not is_object(value) then
+               -- We tried assigning a non-object to an existing object.
+               -- (The list case was checked above.) Expand it into a
+               -- list.
+               expand = true;
+            else
+               -- If the objects share any keys (not nested),
+               -- expand into a list. Else, merge the two
+               -- objects.
+               if objects_share_keys(existing, value) then
+                  expand = true
+               else
+                  merge_objects(existing, value)
+               end
+            end
+         else
+            -- We tried assigning something to a non-object.
+            -- Expand it into a list.
+            expand = true;
+         end
+
+         if expand then
+            local list = {}
+            list[1] = existing
+            list[2] = value
+            object[first_key] = list
+         end
+      end
    else
       object[first_key] = value
    end

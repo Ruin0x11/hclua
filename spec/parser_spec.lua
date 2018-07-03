@@ -1,6 +1,5 @@
 local Parser = require "hclua.parser"
 local Util = require "hclua.util"
-local inspect = require "inspect"
 
 local function strip_locations(ast)
    ast.location = nil

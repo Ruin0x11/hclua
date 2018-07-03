@@ -1,6 +1,5 @@
 local Lexer = require "hclua.lexer"
 local Util = require "hclua.util"
-local inspect = require "inspect"
 
 local Parser = {}
 

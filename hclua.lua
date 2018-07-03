@@ -1,6 +1,5 @@
 -- lua -e 'package.path="./src/?.lua;./src/?/init.lua;"..package.path' hclua.lua
 
-local inspect = require("inspect")
 local Parser = require("hclua.parser")
 local Decoder = require("hclua.decoder")
 
@@ -45,8 +44,6 @@ locale {
 }
 ]])
 
--- print(inspect(asd))
-
 local zsc = Decoder.decode(asd)
-print(inspect(zxc))
+print(dump(zxc))
 
