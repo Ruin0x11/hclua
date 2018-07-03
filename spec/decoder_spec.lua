@@ -335,5 +335,22 @@ foo "bar" { hoge = "piyo" }
                                   }
                         }}},
                get_from_file("multiple_resources.hcl"))
+            assert.same({bar = {{a = "alpha", b = "bravo"}, {a = "alpha", b = "bravo"}}},
+               get_from_file("merge_objects.hcl"))
+            assert.same({bar = {
+                            {a = "alpha", b = "bravo", c = "charlie",
+                             x = "x-ray", y = "yankee", z = "zulu"}}},
+               get_from_file("merge_objects2.hcl"))
+            assert.same({top = {{a = "a", b = "b"}, {b = "b", c = "c"}}},
+               get_from_file("structure_list2.hcl"))
+            assert.same({foo = "bar\nbaz\n"},
+               get_from_file("tab_heredoc.hcl"))
+            assert.same({version = 1,
+                         variable = {
+                            {one = {a = 1, b = 2}},
+                            {one = {a = 3, b = 4}},
+                            {two = {bw = {"big", "array"}, hk = 12}}
+                        }},
+               get_from_file("multiple_merge.hcl"))
    end)
 end)
