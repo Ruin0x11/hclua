@@ -29,4 +29,12 @@ function Util.read_to_string(file)
    return content
 end
 
+function Util.unprefix(str, prefix)
+   if str:sub(1, #prefix) == prefix then
+      return str:sub(#prefix + 1)
+   else
+      return str
+   end
+end
+
 return Util

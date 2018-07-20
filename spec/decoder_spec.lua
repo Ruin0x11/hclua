@@ -213,30 +213,29 @@ foo = {
          assert.same({foo = {bar = {baz = {hoge = "piyo"}}}}, get([[foo "bar" baz { hoge = "piyo" }]]))
    end)
 
--- TODO nested merging
---    it("decodes multiple same nested keys", function()
---          assert.same({foo = {bar = {
---                                 {hoge = "piyo", hogera = "fugera"},
---                                 {hoge = "fuge"},
---                                 {hoge = "baz"}}}},
---             get([[
--- foo bar { hoge = "piyo", hogera = "fugera" }
--- foo bar { hoge = "fuge" }
--- foo bar { hoge = "baz" }
--- ]]))
---          assert.same({foo = {bar = {baz = {hoge = "piyo", hogera = "fugera", baz = "quux"}}}},
---             get([[
--- foo bar { hoge = "piyo", hogera = "fugera" }
--- foo bar { baz = "quux" }
--- ]]))
---    end)
+   it("decodes multiple same nested keys", function()
+         assert.same({foo = {bar = {
+                                {hoge = "piyo", hogera = "fugera"},
+                                {hoge = "fuge"},
+                                {hoge = "baz"}}}},
+            get([[
+foo bar { hoge = "piyo", hogera = "fugera" }
+foo bar { hoge = "fuge" }
+foo bar { hoge = "baz" }
+]]))
+         assert.same({foo = {bar = {hoge = "piyo", hogera = "fugera", baz = "quux"}}},
+            get([[
+foo bar { hoge = "piyo", hogera = "fugera" }
+foo bar { baz = "quux" }
+]]))
+   end)
 
    it("decodes multiple nested keys", function()
          assert.same({foo = {
-                         {bar = {baz = {hoge = "piyo"}}},
-                         {bar = {hoge = "piyo"}},
-                         {hoge = "piyo"},
-                         {hogera = {hoge = "piyo"}}}},
+                         bar = {baz = { hoge = "piyo" }, hoge = "piyo"},
+                         hoge = "piyo",
+                         hogera = { hoge = "piyo" }}
+                     },
             get([[
 foo "bar" baz { hoge = "piyo" }
 foo "bar" { hoge = "piyo" }
@@ -246,9 +245,7 @@ foo hogera { hoge = "piyo" }
    end)
 
    it("decodes nested assignment to string and ident", function()
-         assert.same({foo = {
-                         {bar = {baz = {hoge = "fuge"}}},
-                         {bar = {baz = {hogera = "fugera"}}}}},
+         assert.same({foo = {bar = {baz = {hoge = "fuge", hogera = "fugera"}}}},
             get([[
 foo "bar" baz { "hoge" = fuge }
 "foo" bar baz { hogera = "fugera" }
@@ -324,19 +321,18 @@ foo "bar" { hoge = "piyo" }
                            amis = {default = {east = "foo"}}},
                  {foo = {hoge = "fuga"}}}},
              get_from_file("list_of_nested_object_lists.hcl"))
--- TODO nested merging
---            assert.same({resource = {
---                            aws_db_instance = {
---                                  mysqldb = {
---                                     allocated_storage = 100,
---                                     identifier = "${var.environment}-mysqldb"
---                                  },
---                                  ["mysqldb-readonly"] = {
---                                     allocated_storage = 100,
---                                     identifier = "${var.environment}-mysqldb-readonly"
---                                  }
---                        }}},
---               get_from_file("multiple_resources.hcl"))
+           assert.same({resource = {
+                           aws_db_instance = {
+                                 mysqldb = {
+                                    allocated_storage = 100,
+                                    identifier = "${var.environment}-mysqldb"
+                                 },
+                                 ["mysqldb-readonly"] = {
+                                    allocated_storage = 100,
+                                    identifier = "${var.environment}-mysqldb-readonly"
+                                 }
+                       }}},
+              get_from_file("multiple_resources.hcl"))
             assert.same({bar = {{a = "alpha", b = "bravo"}, {a = "alpha", b = "bravo"}}},
                get_from_file("merge_objects.hcl"))
             assert.same({bar = {a = "alpha", b = "bravo", c = "charlie",
@@ -348,9 +344,12 @@ foo "bar" { hoge = "piyo" }
                get_from_file("tab_heredoc.hcl"))
             assert.same({version = 1,
                          variable = {
-                            {one = {a = 1, b = 2}},
-                            {one = {a = 3, b = 4}},
-                            {two = {bw = {"big", "array"}, hk = 12}}
+                            -- NOTE: is this correct? not sure if it's standardized.
+                            -- another library might treat "variable" itself as a list.
+                            -- the decoding behavior in this case depends on the order
+                            -- of objects that are found.
+                            one = {{a = 1, b = 2}, {a = 3, b = 4}},
+                            two = {bw = {"big", "array"}, hk = 12}
                         }},
                get_from_file("multiple_merge.hcl"))
    end)
