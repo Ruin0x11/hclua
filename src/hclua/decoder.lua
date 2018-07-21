@@ -249,8 +249,11 @@ local function object_length(object)
 end
 
 local function object_common_nested_keys(a, b)
-   local a_child = deepcopy(a)
-   local b_child = deepcopy(b)
+   local a_tmp = a
+   local b_tmp = b
+   local a_child = a
+   local b_child = b
+
    local keys = {}
    local finished = false
 
@@ -275,6 +278,9 @@ local function object_common_nested_keys(a, b)
          break
       end
    end
+
+   a = a_tmp
+   b = b_tmp
 
    return keys, a_child, b_child
 end
