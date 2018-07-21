@@ -242,10 +242,15 @@ local function merge_objects(this, other, keys)
    end
 end
 
-local function object_length(object)
-  local count = 0
-  for _ in pairs(object) do count = count + 1 end
-  return count
+local function is_length_one(object)
+  local found = false
+  for _ in pairs(object) do
+     if found then
+        return false
+     end
+     found = true
+  end
+  return true
 end
 
 local function object_common_nested_keys(a, b)
@@ -258,7 +263,7 @@ local function object_common_nested_keys(a, b)
    local finished = false
 
    while not finished do
-      if object_length(a_child) ~= 1 or object_length(b_child) ~= 1 then
+      if not is_length_one(a_child) or not is_length_one(b_child) then
          break
       end
 
